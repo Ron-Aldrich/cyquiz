@@ -5,7 +5,7 @@ import os
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 
-#os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
+os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
 
 app = Flask(__name__)
 app.secret_key = "NIGGAS AS THIS"
