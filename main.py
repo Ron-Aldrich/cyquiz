@@ -46,7 +46,7 @@ def login():
     flow = Flow.from_client_secrets_file(
         google_file,
         scopes=google_scopes,
-        redirect_uri = "https://cyber-quiz-uo4i.onrender.com"
+        redirect_uri = "https://cyber-quiz-uo4i.onrender.com/authorize"
 
     )
 
@@ -59,7 +59,7 @@ def authorize():
     flow = Flow.from_client_secrets_file(
         google_file,
         scopes=  google_scopes,
-        redirect_uri = "https://cyber-quiz-uo4i.onrender.com"
+        redirect_uri = "https://cyber-quiz-uo4i.onrender.com/authorize"
     )
 
     flow.fetch_token(authorization_response=request.url)
