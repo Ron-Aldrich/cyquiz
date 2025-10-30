@@ -27,7 +27,7 @@ conn = psycopg2.connect(
 
 cur = conn.cursor() 
 
-google_file = "gg.json"
+google_file = "cyber.json"
 
 google_scopes = [
     "openid",
@@ -46,7 +46,7 @@ def login():
     flow = Flow.from_client_secrets_file(
         google_file,
         scopes=google_scopes,
-        redirect_uri = "http://127.0.0.1:5000/authorize"
+        redirect_uri = "https://cyber-quiz-uo4i.onrender.com"
 
     )
 
@@ -59,7 +59,7 @@ def authorize():
     flow = Flow.from_client_secrets_file(
         google_file,
         scopes=  google_scopes,
-        redirect_uri = "http://127.0.0.1:5000/authorize"
+        redirect_uri = "https://cyber-quiz-uo4i.onrender.com"
     )
 
     flow.fetch_token(authorization_response=request.url)
