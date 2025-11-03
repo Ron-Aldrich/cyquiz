@@ -1,31 +1,13 @@
-from flask import Flask, redirect, request, url_for, session, render_template
-from psycopg2 import IntegrityError, OperationalError
-import psycopg2
+from flask import Flask, request, render_template, session, redirect, url_for
+from dotenv import load_dotenv
 import os
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
+from psycopg2 import IntegrityError, OperationalError
+import psycopg2
 
+load_dotenv()
 os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
-
-app = Flask(__name__)
-app.secret_key = "NIGGAS AS THIS"
-
-dbhost = "dpg-d3fmob7diees73audbk0-a.oregon-postgres.render.com"
-dbname = "QUIZ"
-dbuser = "ron"
-dbpassword = "cTwAsx67nMiBNVxgMoaS3Jzmdd8ZHOIA"
-dbport = 5432
-
-
-conn = psycopg2.connect(
-    host=dbhost,          
-    user=dbuser,          
-    dbname=dbname,        
-    port=dbport,          
-    password=dbpassword   
-)
-
-cur = conn.cursor() 
 
 google_file = "cyber.json"
 
@@ -35,137 +17,248 @@ google_scopes = [
     "https://www.googleapis.com/auth/userinfo.profile"
 ]
 
-@app.route("/")
+
+app = Flask(__name__)
+app.secret_key = "NIGGAS"
+
+
+conn = psycopg2.connect(
+    host=os.getenv("dbhost"),
+    user = os.getenv("dbuser"),
+    dbname = os.getenv("dbname"),
+    port = os.getenv("dbport"),
+    password = os.getenv("dbpassword")
+    )
+cur = conn.cursor()
+
+
+
+@app.route("/", methods = ["POST","GET"])
 def index():
-    if "username" in session:
-        return redirect(url_for("dashboard"))
+    if "name" in session:
+        return redirect(url_for('dashboard'))
+    userAccount = request.form.get("username")
+    userPassword = request.form.get("password")
+    action = request.form.get("action")
+
+
+    if request.method == "POST":
+        if action == "Sign Up":
+            try:
+                cur.execute(f"insert into accounts (username, password) values ('{userAccount}', '{userPassword}')")
+                conn.commit()
+
+                session["name"] = userAccount
+                
+
+                return redirect(url_for('dashboard'))
+            
+            except IntegrityError as e:
+                conn.rollback()
+                return f"<script>alert('{userAccount} has been taken. Try Another'); window.location='/'</script>"
+            
+        if action == "Login":
+            cur.execute(f"select password from accounts where username = '{userAccount}'")
+            pwd = cur.fetchone()
+            if pwd:
+                if pwd[0] == userPassword:
+                    session["name"] = userAccount
+                    session["name"] = userAccount
+
+
+                    return redirect(url_for("dashboard"))
+                else:
+                    return "<script>alert('Invalis Username or Password'); window.location='/'</script>"
+            else:
+                return "<script>alert('Invalis Username or Password'); window.location='/'</script>"
+            
+
     return render_template("index.html")
+
 
 @app.route("/login")
 def login():
     flow = Flow.from_client_secrets_file(
         google_file,
         scopes=google_scopes,
-        redirect_uri = "https://cyber-quiz-uo4i.onrender.com/authorize"
-
+        redirect_uri = "https://cybertech-quiz.onrender.com/authorize"
     )
 
-    auth_url, state = flow.authorization_url()
-    session["state"] = state
-    return redirect(auth_url)
+    aut_url, state = flow.authorization_url()
+    return redirect(aut_url)
 
 @app.route("/authorize")
 def authorize():
+    if "name" in session:
+        return redirect(url_for('dashboard'))
     flow = Flow.from_client_secrets_file(
         google_file,
-        scopes=  google_scopes,
-        redirect_uri = "https://cyber-quiz-uo4i.onrender.com/authorize"
+        scopes=google_scopes,
+        redirect_uri = "https://cybertech-quiz.onrender.com/authorize"
     )
 
-    flow.fetch_token(authorization_response=request.url)
-    credentials = flow.credentials
-    auth2 = build("oauth2", "v2", credentials=credentials)
-    urser_info = auth2.userinfo().get().execute()
+    flow.fetch_token(authorization_response = request.url)
+    creds = flow.credentials
+    auth2 = build ("oauth2", 'v2', credentials=creds)
+    userinformation = auth2.userinfo().get().execute()
 
-    session["name"] = urser_info.get("name")
-    session["email"] = urser_info.get("email")
-    session["picture"] = urser_info.get("picture")
-    
+    session["name"] = userinformation.get("name")
+    session["picture"] = userinformation.get("picture")
+    session["email"] = userinformation.get("email")
+
     cur.execute(f"select username from accounts where username = '{session["name"]}'")
-    data  = cur.fetchone()
+    data = cur.fetchone()
+    
 
     if not data:
-        cur.execute(f"insert into accounts (username, password, score, done) values ('{session["name"]}', '', 0, False)")
+        cur.execute(f"insert into accounts(username, email ) values ('{session["name"]}', '{session["email"]}')")
+
         conn.commit()
 
-        
-
-    return redirect(url_for("dashboard"))
-
+    
+    return redirect(url_for('dashboard'))
 
 @app.route("/dashboard")
 def dashboard():
     if "name" not in session:
-        return redirect(url_for("index"))
-    username = session["name"]
+        return redirect(url_for('index'))
+    
+    username = session.get("name")
     cur.execute(f"select score from accounts where username = '{username}'")
     score = cur.fetchone()[0]
+    return render_template("dashboard.html", name = username, score = score)
 
-    return render_template("dashboard.html", name = session["name"], email = session["email"], picture = session["picture"], score = score)
 
-@app.route("/logout")
-def logout():
-    session.clear()
-    return render_template("index.html")
 
-@app.route("/quiz", methods = ["POST", "GET"])
-def quiz():
+@app.route("/rank")
+def rank():
+    username = session.get("name")
+    cur.execute(f"select username, score from accounts order by score desc")
+    ranks = cur.fetchall()
+    return  render_template("rank.html", ranks = ranks)
+
+
+
+@app.route("/quiz1", methods = ["POST", "GET"])
+def quiz1():
     if "name" not in session:
-        redirect(url_for('index'))
-    username = session["name"]
-    cur.execute(f"select done from accounts where username = '{username}'")
+        return redirect(url_for('index'))
+    username = session.get("name")
+    cur.execute(f"select quiz1 from accounts where username = '{username}'")
     done_status = cur.fetchone()[0]
 
     if done_status:
-        return "<script>alert('You already answered this sorry'); window.location.href='/dashboard' </script>"
+        return "<script>alert('You already Answered this!'); window.location='/dashboard'</script>"
+
     
-    if request.method == 'POST':
+    answers = {
+        "quiz1": "A",
+        "quiz2": "A",
+        "quiz3": "B",
+        "quiz4": "A",
+        "quiz5": "A"
+    }
+    
+    if request.method == "POST":
         score = 0
-        
-
-        answers = {
-            'q1':  'A',
-            'q2':  'A'
-        }
-
         for key in answers:
             if request.form.get(key) == answers[key]:
                 score += 1
-        cur.execute(f"update accounts set score = score + {score}, done = True where username = '{username}'")
+        cur.execute(f"update accounts set score = score + {score}, quiz1 = TRUE where username = '{username}'")
         conn.commit()
+        
+        return f"<script>alert('Congratulations you got {score} over 5'); window.location='/dashboard'</script>"
 
-        return redirect(url_for("dashboard"))
+    
+
+    return render_template("QUIZ/quiz1.html")
 
 
 
-
-    return render_template("quiz.html")
 
 @app.route("/quiz2", methods = ["POST", "GET"])
 def quiz2():
     if "name" not in session:
-        return redirect(url_for("index"))
+        return redirect(url_for('index'))
     
-    username = session["name"]
-    cur.execute(f"select done2 from accounts where username = '{username}'")
+    username = session.get("name")
+    cur.execute(f"select quiz2 from accounts where username = '{username}'")
     done_status = cur.fetchone()[0]
 
     if done_status:
-        return "<script>alert('You already Answered this Quiz'); window.location = '/dashboard' </script>"
+        return "<script>alert('You already Answered this!'); window.location='/dashboard'</script>"
+
     
-    if request.method == 'POST':
+    answers = {
+        "quiz1": "A",
+        "quiz2": "A",
+        "quiz3": "A",
+        "quiz4": "A",
+        "quiz5": "A"
+    }
+    
+    if request.method == "POST":
         score = 0
-        answer2 = {
-            'q1': 'B',
-            'q2' : 'A'
-        }
-
-        for key in answer2:
-            if request.form.get(key) == answer2[key]:
+        for key in answers:
+            if request.form.get(key) == answers[key]:
                 score += 1
-
-        cur.execute(f"update accounts set score = score + {score}, done2 = True where username = '{username}'")
+        cur.execute(f"update accounts set score = score + {score}, quiz2 = TRUE where username = '{username}'")
         conn.commit()
-        return redirect(url_for('dashboard'))
-    return render_template("quiz2.html")
+        
+        return f"<script>alert('Congratulations you got {score} over 5'); window.location='/dashboard'</script>"
+    
+    
+    
 
-@app.route("/rank")
-def rank():
-    cur.execute("select username, score from accounts order by score desc")
-    ranklist = cur.fetchall()
+    return render_template("QUIZ/quiz2.html")
 
-    return render_template("rank.html", ranking = ranklist)
 
-if __name__ == "__main__":
+@app.route("/quiz3", methods = ["POST","GET"])
+def quiz3():
+    if "name" not in session:
+        return redirect(url_for('index'))
+    
+    username = session.get("name")
+    cur.execute(f"select quiz3 from accounts where username = '{username}'")
+    done_status = cur.fetchone()[0]
+
+    if done_status:
+        return "<script>alert('You already Answered this!'); window.location='/dashboard'</script>"
+
+    
+    answers = {
+        "quiz1": "B",
+        "quiz2": "B",
+        "quiz3": "B",
+        "quiz4": "B",
+        "quiz5": "B"
+    }
+    
+    if request.method == "POST":
+        score = 0
+        for key in answers:
+            if request.form.get(key) == answers[key]:
+                score += 1
+        cur.execute(f"update accounts set score = score + {score}, quiz3 = TRUE where username = '{username}'")
+        conn.commit()
+        
+        return f"<script>alert('Congratulations you got {score} over 5'); window.location='/dashboard'</script>"
+    
+    return render_template("QUIZ/quiz3.html")
+
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for('index'))
+
+if __name__  == "__main__":
     port = os.environ.get("PORT", 5000)
     app.run(host="0.0.0.0", port=port)
+
+
+
+
+
+
